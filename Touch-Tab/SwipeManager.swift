@@ -71,7 +71,7 @@ class SwipeManager {
 
         switch touchesCount {
         case 2: processTwoFingers()
-        case 3: processThreeFingers(touches: touches)
+        case 4: processThreeFingers(touches: touches)
         default: processOtherFingers()
         }
     }
