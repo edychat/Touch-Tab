@@ -3,16 +3,16 @@ name: Build and Release Touch-Tab
 on:
   push:
     tags:
-      - 'v*'  # Triggers the workflow on version tags like v1.0.0
+      - 'v*'  # Triggers when you push a tag like v1.0.0
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
   build:
-    runs-on: macos-latest  # Uses a macOS runner
+    runs-on: macos-latest  # Uses GitHub macOS runner
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
@@ -29,7 +29,7 @@ jobs:
           zip -r Touch-Tab.zip Touch-Tab.app
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Touch-Tab
           path: output/Touch-Tab.zip
@@ -42,9 +42,10 @@ jobs:
 
     steps:
       - name: Download Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: Touch-Tab
+          path: .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
