@@ -19,8 +19,9 @@ jobs:
 
       - name: Build the App
         run: |
-          xcodebuild -project Touch-Tab.xcodeproj -scheme Touch-Tab -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+          xcodebuild -project Touch-Tab.xcodeproj -scheme Touch-Tab -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO -derivedDataPath build/
           mkdir -p output
+          ls -R build/
           cp -r build/Release/Touch-Tab.app output/
 
       - name: Compress App
