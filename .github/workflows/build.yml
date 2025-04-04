@@ -1,0 +1,54 @@
+name: Build and Release Touch-Tab
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers the workflow on version tags like v1.0.0
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  build:
+    runs-on: macos-latest  # Uses a macOS runner
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Xcode
+        run: sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+
+      - name: Build the App
+        run: |
+          xcodebuild -project Touch-Tab.xcodeproj -scheme Touch-Tab -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+          mkdir -p output
+          cp -r build/Release/Touch-Tab.app output/
+
+      - name: Compress App
+        run: |
+          cd output
+          zip -r Touch-Tab.zip Touch-Tab.app
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Touch-Tab
+          path: output/Touch-Tab.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: Touch-Tab
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: Touch-Tab.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
