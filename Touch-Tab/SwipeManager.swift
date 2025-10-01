@@ -2,12 +2,14 @@ import Cocoa
 
 class SwipeManager {
     private static let accVelXThreshold: Float = 0.07
+    private static let pinchThreshold: Float = 0.015
     // TODO: figure out the real value of the delay.
     private static let appSwitcherUIDelay: Double = 0.2
 
     private static var eventTap: CFMachPort? = nil
     // Event state.
     private static var accVelX: Float = 0
+    private static var accPinchDistance: Float = 0
     private static var prevTouchPositions: [String: NSPoint] = [:]
     // Gesture state. Gesture may consists of multiple events.
     private static var startTime: Date? = nil
@@ -21,6 +23,10 @@ class SwipeManager {
             AppSwitcher.cmdTab()
         case .end:
             AppSwitcher.selectInAppSwitcher()
+        case .pinchIn:
+            AppSwitcher.cmdC()
+        case .pinchOut:
+            AppSwitcher.cmdV()
         }
     }
 
@@ -82,6 +88,22 @@ class SwipeManager {
     }
 
     private static func processThreeFingers(touches: Set<NSTouch>) {
+        // Check for pinch gesture
+        if let pinchDistance = detectPinch(touches: touches) {
+            accPinchDistance += pinchDistance
+            
+            if abs(accPinchDistance) >= pinchThreshold {
+                if accPinchDistance > 0 {
+                    listener(.pinchOut)
+                } else {
+                    listener(.pinchIn)
+                }
+                clearEventState()
+                return
+            }
+        }
+        
+        // Check for horizontal swipe
         let velX = SwipeManager.horizontalSwipeVelocity(touches: touches)
         // We don't care about non-horizontal swipes.
         if velX == nil {
@@ -119,6 +141,7 @@ class SwipeManager {
 
     private static func clearEventState() {
         accVelX = 0
+        accPinchDistance = 0
         prevTouchPositions.removeAll()
     }
 
@@ -129,6 +152,63 @@ class SwipeManager {
 
     private static func endGesture() {
         listener(.end)
+    }
+
+    private static func detectPinch(touches: Set<NSTouch>) -> Float? {
+        // We need at least 2 touches to calculate distance
+        guard touches.count >= 2 else {
+            return nil
+        }
+        
+        // Calculate centroid (center point) of all touches
+        var currentCentroid = NSPoint.zero
+        var previousCentroid = NSPoint.zero
+        var validPreviousCount = 0
+        
+        for touch in touches {
+            currentCentroid.x += touch.normalizedPosition.x
+            currentCentroid.y += touch.normalizedPosition.y
+            
+            if let prevPos = prevTouchPositions["\(touch.identity)"] {
+                previousCentroid.x += prevPos.x
+                previousCentroid.y += prevPos.y
+                validPreviousCount += 1
+            }
+        }
+        
+        // We need previous positions to calculate pinch
+        guard validPreviousCount >= 2 else {
+            return nil
+        }
+        
+        currentCentroid.x /= CGFloat(touches.count)
+        currentCentroid.y /= CGFloat(touches.count)
+        previousCentroid.x /= CGFloat(validPreviousCount)
+        previousCentroid.y /= CGFloat(validPreviousCount)
+        
+        // Calculate average distance from centroid for current and previous positions
+        var currentAvgDistance: Float = 0
+        var previousAvgDistance: Float = 0
+        
+        for touch in touches {
+            let currentPos = touch.normalizedPosition
+            let dx = currentPos.x - currentCentroid.x
+            let dy = currentPos.y - currentCentroid.y
+            currentAvgDistance += Float(sqrt(dx * dx + dy * dy))
+            
+            if let prevPos = prevTouchPositions["\(touch.identity)"] {
+                let pdx = prevPos.x - previousCentroid.x
+                let pdy = prevPos.y - previousCentroid.y
+                previousAvgDistance += Float(sqrt(pdx * pdx + pdy * pdy))
+            }
+        }
+        
+        currentAvgDistance /= Float(touches.count)
+        previousAvgDistance /= Float(validPreviousCount)
+        
+        // Positive value means pinch out (fingers moving apart)
+        // Negative value means pinch in (fingers moving together)
+        return currentAvgDistance - previousAvgDistance
     }
 
     private static func horizontalSwipeVelocity(touches: Set<NSTouch>) -> Float? {
@@ -175,6 +255,8 @@ class SwipeManager {
     enum EventType {
         case startOrContinue(direction: Direction)
         case end
+        case pinchIn
+        case pinchOut
 
         enum Direction {
             case left
