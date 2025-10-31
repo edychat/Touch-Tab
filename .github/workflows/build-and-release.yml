@@ -1,0 +1,101 @@
+name: Build and Release (macOS)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: Build macOS .app, zip, and create GitHub Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      EXPORT_DIR: ${{ runner.temp }}/export
+      ZIP_NAME: TouchTab.zip
+      APP_NAME: TouchTab.app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set build variables
+        run: |
+          # ----- CONFIGURE THESE VALUES -----
+          # Replace with your actual scheme/project/workspace names.
+          # If you use an Xcode workspace (CocoaPods / SPM workspace), set WORKSPACE and leave PROJECT empty.
+          echo "SCHEME=Touch-Tab" >> $GITHUB_ENV
+          echo "PROJECT=Touch-Tab.xcodeproj" >> $GITHUB_ENV
+          echo "WORKSPACE=" >> $GITHUB_ENV
+          echo "CONFIGURATION=Release" >> $GITHUB_ENV
+          echo "ARCHIVE_PATH=${{ runner.temp }}/TouchTab.xcarchive" >> $GITHUB_ENV
+          echo "EXPORT_PATH=${{ env.EXPORT_DIR }}" >> $GITHUB_ENV
+          # ----- END CONFIG -----
+
+      - name: Clean build directory
+        run: |
+          rm -rf "${EXPORT_DIR}" "${ARCHIVE_PATH}"
+          mkdir -p "${EXPORT_DIR}"
+
+      - name: Archive app
+        run: |
+          if [ -n "$WORKSPACE" ] && [ "$WORKSPACE" != " " ]; then
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration "$CONFIGURATION" -archivePath "$ARCHIVE_PATH" clean archive
+          else
+            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIGURATION" -archivePath "$ARCHIVE_PATH" clean archive
+          fi
+
+      - name: Create exportOptions.plist
+        run: |
+          cat > "${{ env.EXPORT_DIR }}/exportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+          cat "${{ env.EXPORT_DIR }}/exportOptions.plist"
+
+      - name: Export archive (.app)
+        run: |
+          xcodebuild -exportArchive -archivePath "$ARCHIVE_PATH" -exportPath "$EXPORT_PATH" -exportOptionsPlist "${EXPORT_DIR}/exportOptions.plist"
+
+      - name: Verify exported app exists
+        run: |
+          ls -la "${EXPORT_PATH}"
+          if [ ! -d "${EXPORT_PATH}/${APP_NAME}" ]; then
+            echo "ERROR: ${APP_NAME} not found in ${EXPORT_PATH}"
+            exit 1
+          fi
+
+      - name: Zip the .app (preserve resource forks)
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}" "${ZIP_NAME}"
+          ls -la "${ZIP_NAME}"
+        working-directory: ${{ env.EXPORT_DIR }}
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Build-{0}', github.run_number) }}
+          body: |
+            Automated build from commit ${{ github.sha }}.
+            NOTE: This build is unsigned and non‑notarized (no Developer ID certificate provided in CI).
+            Users may need to right-click → Open and then grant Accessibility / Input Monitoring permissions.
+          files: ${{ env.EXPORT_DIR }}/${{ env.ZIP_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show release URL
+        run: |
+          echo "Release created: ${{ steps.create_release.outputs.html_url }}"
