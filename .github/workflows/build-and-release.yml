@@ -10,6 +10,8 @@ jobs:
   build-and-release:
     name: Build macOS .app, zip, and create GitHub Release
     runs-on: macos-latest
+    permissions:
+      contents: write
     env:
       EXPORT_DIR: ${{ runner.temp }}/export
       ZIP_NAME: TouchTab.zip
