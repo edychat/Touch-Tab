@@ -76,7 +76,6 @@ jobs:
 
       - name: Zip the .app (preserve resource forks)
         run: |
-          cd "${EXPORT_PATH}"
           ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}" "${ZIP_NAME}"
           ls -la "${ZIP_NAME}"
         working-directory: ${{ env.EXPORT_DIR }}
@@ -85,22 +84,13 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name != '' && github.ref_name || format('v{0}', github.run_number) }}
-          name: ${{ github.ref_name != '' && github.ref_name || format('Build-{0}', github.run_number) }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Build-{0}', github.run_number) }}
           body: |
             Automated build from commit ${{ github.sha }}.
             NOTE: This build is unsigned and non‑notarized (no Developer ID certificate provided in CI).
             Users may need to right-click → Open and then grant Accessibility / Input Monitoring permissions.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload build zip to Release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ env.EXPORT_DIR }}/${{ env.ZIP_NAME }}
-          asset_name: ${{ env.ZIP_NAME }}
-          asset_content_type: application/zip
+          files: ${{ env.EXPORT_DIR }}/${{ env.ZIP_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
